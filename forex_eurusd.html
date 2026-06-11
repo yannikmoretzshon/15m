@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EUR/USD · Gráfico de Velas 15M</title>
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0e17;
+      --surface:   #111624;
+      --border:    #1e2840;
+      --bull:      #26a69a;
+      --bear:      #ef5350;
+      --accent:    #4c82fb;
+      --text:      #e0e6f0;
+      --muted:     #5a6480;
+      --label:     #8892b0;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+    }
+
+    /* ── Layout ── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 16px;
+      gap: 12px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pair-block {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .pair-name {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      color: #fff;
+    }
+
+    .price-live {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--bull);
+      transition: color 0.3s;
+    }
+    .price-live.down { color: var(--bear); }
+
+    .change-tag {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(38,166,154,0.12);
+      color: var(--bull);
+    }
+    .change-tag.down { background: rgba(239,83,80,0.12); color: var(--bear); }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--label);
+    }
+
+    .stat-value {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tf-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--label);
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 1px;
+    }
+    .tf-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tf-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .refresh-btn {
+      margin-left: auto;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--label);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .refresh-btn:hover { border-color: var(--bull); color: var(--bull); }
+    .refresh-btn svg { transition: transform 0.4s; }
+    .refresh-btn.spinning svg { transform: rotate(360deg); }
+
+    /* ── Status pill ── */
+    .status {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(76,130,251,0.1);
+      color: var(--accent);
+      border: 1px solid rgba(76,130,251,0.25);
+    }
+    .status.live::before {
+      content: '● ';
+      color: var(--bull);
+      animation: blink 1.4s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Chart wrapper ── */
+    .chart-card {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      min-height: 300px;
+    }
+
+    #chart {
+      width: 100%;
+      height: 100%;
+    }
+
+    .chart-overlay {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .loading-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: var(--surface);
+      z-index: 10;
+    }
+
+    .spinner {
+      width: 32px; height: 32px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--label);
+    }
+
+    .error-state {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: var(--surface);
+      z-index: 10;
+    }
+
+    .error-icon { font-size: 28px; }
+    .error-msg { font-size: 13px; color: var(--bear); text-align: center; padding: 0 24px; }
+    .error-sub { font-size: 11px; color: var(--muted); }
+
+    /* ── Footer ── */
+    footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .footer-note {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .last-update {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="pair-block">
+      <span class="pair-name">EUR/USD</span>
+      <span class="price-live" id="livePrice">—</span>
+      <span class="change-tag" id="changeTag">—</span>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <div class="stat"><span class="stat-label">Abertura</span><span class="stat-value" id="statOpen">—</span></div>
+      <div class="stat"><span class="stat-label">Máxima</span><span class="stat-value" id="statHigh">—</span></div>
+      <div class="stat"><span class="stat-label">Mínima</span><span class="stat-value" id="statLow">—</span></div>
+      <div class="stat"><span class="stat-label">Fechamento</span><span class="stat-value" id="statClose">—</span></div>
+    </div>
+  </header>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="tf-btn" onclick="changeTf('1min',this)">1M</button>
+    <button class="tf-btn" onclick="changeTf('5min',this)">5M</button>
+    <button class="tf-btn active" onclick="changeTf('15min',this)">15M</button>
+    <button class="tf-btn" onclick="changeTf('1h',this)">1H</button>
+    <button class="tf-btn" onclick="changeTf('4h',this)">4H</button>
+    <button class="tf-btn" onclick="changeTf('1day',this)">1D</button>
+    <span class="status live" id="statusPill">Buscando dados…</span>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadData()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+      Atualizar
+    </button>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-card">
+    <div id="loading" class="loading-state">
+      <div class="spinner"></div>
+      <span class="loading-text">Carregando velas EUR/USD…</span>
+    </div>
+    <div id="errorState" class="error-state">
+      <span class="error-icon">⚠️</span>
+      <span class="error-msg" id="errorMsg">Não foi possível buscar os dados.</span>
+      <span class="error-sub">Verifique sua conexão ou tente novamente.</span>
+    </div>
+    <div id="chart"></div>
+    <div class="chart-overlay" id="chartOverlay">EUR/USD · 15M</div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <span class="footer-note">Dados: Twelve Data (plano gratuito) · Velas OHLC ao vivo</span>
+    <span class="last-update" id="lastUpdate">—</span>
+  </footer>
+
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────────────────────────────────
+  const API_KEY = 'c4b0f09590c440e18f195406e67e9361';
+  let currentTf = '15min';
+  let chart, candleSeries;
+  let candleData = [];        // histórico de velas carregadas
+  let liveInterval = null;    // timer do polling ao vivo
+  let firstOpen = null;       // abertura da primeira vela do dia (para % de variação)
+
+  // Intervalo de polling em ms por timeframe
+  const POLL_MS = {
+    '1min': 5000, '5min': 10000, '15min': 15000,
+    '1h': 30000,  '4h': 60000,   '1day': 120000,
+  };
+
+  // ── Chart init ───────────────────────────────────────────────────────────────
+  function initChart() {
+    const container = document.getElementById('chart');
+    chart = LightweightCharts.createChart(container, {
+      layout: { background: { color: '#111624' }, textColor: '#8892b0' },
+      grid: { vertLines: { color: '#1e2840' }, horzLines: { color: '#1e2840' } },
+      crosshair: {
+        vertLine: { color: '#4c82fb55', width: 1 },
+        horzLine: { color: '#4c82fb55', width: 1 },
+      },
+      rightPriceScale: { borderColor: '#1e2840' },
+      timeScale: { borderColor: '#1e2840', timeVisible: true, secondsVisible: false },
+    });
+
+    candleSeries = chart.addCandlestickSeries({
+      upColor: '#26a69a', downColor: '#ef5350',
+      borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+      wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+    });
+
+    chart.subscribeCrosshairMove(param => {
+      if (param.time && param.seriesData) {
+        const d = param.seriesData.get(candleSeries);
+        if (d) updateStats(d);
+      }
+    });
+
+    const ro = new ResizeObserver(() => {
+      chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+    });
+    ro.observe(container);
+  }
+
+  // ── Carga inicial: histórico completo ────────────────────────────────────────
+  async function loadData() {
+    showLoading(true);
+    hideError();
+    stopLive();
+
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+
+    try {
+      const url = `https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=${currentTf}&outputsize=100&apikey=${API_KEY}&format=JSON`;
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (json.status === 'error' || !json.values) {
+        throw new Error(json.message || 'Resposta inválida da API');
+      }
+
+      const raw = json.values.reverse();
+      candleData = raw.map(c => ({
+        time:  Math.floor(new Date(c.datetime).getTime() / 1000),
+        open:  parseFloat(c.open),
+        high:  parseFloat(c.high),
+        low:   parseFloat(c.low),
+        close: parseFloat(c.close),
+      }));
+
+      candleSeries.setData(candleData);
+      chart.timeScale().fitContent();
+
+      firstOpen = candleData[0].open;
+      const last = candleData[candleData.length - 1];
+      updateLivePrice(last);
+      updateStats(last);
+      updateChange(firstOpen, last.close);
+      updateOverlay();
+      setStatus('live', 'Ao vivo');
+      updateTimestamp();
+      showLoading(false);
+
+      // Inicia o polling da vela ao vivo
+      startLive();
+
+    } catch (err) {
+      showLoading(false);
+      showError(err.message);
+      setStatus('', 'Erro');
+    }
+
+    setTimeout(() => btn.classList.remove('spinning'), 500);
+  }
+
+  // ── Polling ao vivo: atualiza apenas a última vela em formação ───────────────
+  function startLive() {
+    const ms = POLL_MS[currentTf] || 15000;
+    liveInterval = setInterval(tickLive, ms);
+  }
+
+  function stopLive() {
+    if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
+  }
+
+  async function tickLive() {
+    try {
+      // Busca apenas a vela mais recente (outputsize=1) + a anterior para garantir
+      const url = `https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=${currentTf}&outputsize=2&apikey=${API_KEY}&format=JSON`;
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (json.status === 'error' || !json.values) return;
+
+      const raw = json.values.reverse(); // [mais antiga, mais recente]
+      const latest = {
+        time:  Math.floor(new Date(raw[raw.length - 1].datetime).getTime() / 1000),
+        open:  parseFloat(raw[raw.length - 1].open),
+        high:  parseFloat(raw[raw.length - 1].high),
+        low:   parseFloat(raw[raw.length - 1].low),
+        close: parseFloat(raw[raw.length - 1].close),
+      };
+
+      const lastStored = candleData[candleData.length - 1];
+
+      if (latest.time === lastStored.time) {
+        // Mesma vela — atualiza high/low/close em formação
+        candleData[candleData.length - 1] = latest;
+      } else if (latest.time > lastStored.time) {
+        // Nova vela nasceu — adiciona ao histórico
+        candleData.push(latest);
+      }
+
+      // Atualiza gráfico com update (sem re-renderizar tudo)
+      candleSeries.update(candleData[candleData.length - 1]);
+
+      // Atualiza UI
+      updateLivePrice(latest);
+      updateStats(latest);
+      updateChange(firstOpen, latest.close);
+      updateTimestamp();
+      setStatus('live', 'Ao vivo');
+
+    } catch (e) {
+      // Falha silenciosa no tick — não interrompe o usuário
+      console.warn('Tick falhou:', e.message);
+    }
+  }
+
+  // ── UI helpers ───────────────────────────────────────────────────────────────
+  function updateLivePrice(candle) {
+    const el = document.getElementById('livePrice');
+    const prev = parseFloat(el.textContent) || candle.close;
+    el.textContent = candle.close.toFixed(5);
+    el.className = 'price-live ' + (candle.close >= prev ? '' : 'down');
+  }
+
+  function updateStats(candle) {
+    document.getElementById('statOpen').textContent  = candle.open.toFixed(5);
+    document.getElementById('statHigh').textContent  = candle.high.toFixed(5);
+    document.getElementById('statLow').textContent   = candle.low.toFixed(5);
+    document.getElementById('statClose').textContent = candle.close.toFixed(5);
+  }
+
+  function updateChange(openFirst, closeLast) {
+    const pct = ((closeLast - openFirst) / openFirst) * 100;
+    const tag = document.getElementById('changeTag');
+    const sign = pct >= 0 ? '+' : '';
+    tag.textContent = `${sign}${pct.toFixed(2)}%`;
+    tag.className = 'change-tag ' + (pct >= 0 ? '' : 'down');
+  }
+
+  function updateOverlay() {
+    document.getElementById('chartOverlay').textContent = `EUR/USD · ${currentTf.toUpperCase()}`;
+  }
+
+  function updateTimestamp() {
+    document.getElementById('lastUpdate').textContent =
+      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+  }
+
+  function setStatus(cls, text) {
+    const el = document.getElementById('statusPill');
+    el.textContent = text;
+    el.className = 'status ' + cls;
+  }
+
+  function changeTf(tf, btn) {
+    currentTf = tf;
+    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadData();
+  }
+
+  function showLoading(show) {
+    document.getElementById('loading').style.display = show ? 'flex' : 'none';
+  }
+
+  function showError(msg) {
+    document.getElementById('errorState').style.display = 'flex';
+    document.getElementById('errorMsg').textContent = msg || 'Erro ao buscar dados.';
+  }
+
+  function hideError() {
+    document.getElementById('errorState').style.display = 'none';
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────────────────────
+  initChart();
+  loadData();
+</script>
+</body>
+</html>
